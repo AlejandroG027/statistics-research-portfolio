@@ -1,4 +1,5 @@
-# Statistics Research Portfolio
+# Statistics Research Portfolio        
+##Alejandro Gomez
 
 This repository contains selected academic and applied projects demonstrating my approach to statistical modeling, data analysis, and research interpretation.
 
