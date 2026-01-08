@@ -1,0 +1,515 @@
+---
+title: "An Understanding of Crime in the US"
+subtitle: STAT 324
+author: "Sydney Potkey and Alejandro Gomez"
+date: "`r Sys.Date()`"
+format:
+  html:
+    theme: lux 
+    toc: true
+    code-tools: true
+    code-fold: true
+    self-contained: true
+    self-contained-math: true
+    number-sections: true
+execute: 
+  echo: true
+  eval: true
+  message: false
+  warning: false
+editor_options: 
+  chunk_output_type: inline
+---
+
+<!-- This is how you leave yourself private comments in Quarto -->
+
+
+<!-- Load Packages -->
+<!-- "include = FALSE" suppresses the output of the chunk from being displayed in the final document -->
+```{r packages, include=FALSE}
+library(readr)
+library(car)
+library(MASS)
+library(lmtest)
+library(kableExtra)
+library(GGally)
+library(leaps)
+library(tidyverse)
+```
+
+<!-- Import Data, include =  -->
+<!-- "include = FALSE" suppresses the output of the chunk from being displayed in the final document -->
+```{r import, include=FALSE}
+CrimeRate <- read_csv("CrimeRate.csv")
+```
+
+<!-- Title Image -->
+![](STAT334pic.jpg)
+
+# Abstract
+
+This report investigates factors influencing the amount of crime present in 400 US cities. Through visualizations, statistical tests, and variable analysis, this report provides insight as to what variables could potentially predict the prevalence of crime. Furthermore, predictive methods are used to test the plausibility of predicting crime. 
+
+# Introduction 
+
+The United States ranks high among developed countries for both violent and property crimes. It is estimated that rates of violent crime in the US have at time been up to 9 times that of European countries ~(1)~.However elevated crime is not an issue for all US counties. The discrepancies in rate of crime for different areas of the country vary greatly. This study aims to gain insight as to what factors lead to a risk of increased crime in US counties. 
+
+Specifically this report investigates potential effects of high school graduation rate, poverty, and population on the amount of crime per 100,000 residents in 400 US counties. Understanding what factors lead to increased rates of crime is a first step in lowering the US crime rate as a whole. 
+
+The information that this study aims to collect could be a useful tool for policy makers, criminal justice professionals, and many others interested in the fight against crime in the US. 
+
+# Aknowledgements 
+1. Kalish, C. B. (n.d.). International crime rates. Bureau of Justice Statistics. https://bjs.ojp.gov/library/publications/international-crime-rates-0 
+
+
+# Materials and Methods
+
+The original source of this data set is unknown. Our observational units are 400 singular US counties. The response variable being assessed is serious crimes per 100,000 residents. The data set contains 12 potential explanatory variables, 4 of which are investigated in this report. The quantitative variables population(in 100,00s), high school graduation rate, and poverty measured as the percent of population living below the poverty line, along with the categorical variable region (North East, North Central, South, West) are examined in relation to crime.  It is unknown whether random sampling was implemented, but we do assume the study was observational.
+
+
+# Split the Data 
+
+
+Our data on Crime in the US contains 440 counties/observations. For the purposes of this analysis, we will be randomly splitting the observations into two different groups:
+
+1. testdata: Random sample of 20% (88 Observations)
+
+2. traindata: The remaining 80% (352) of observations
+
+The purpose of splitting the data is to use 20% of observations at the end of the analysis to validate our proposed model. The remaining 80% will be used in our main data analysis processes.The seed was set to 922, to ensure consistent results. 
+
+<!-- Split the Data  -->
+<!-- "include = FALSE" suppresses the output of the chunk from being displayed in the final document -->
+```{r, include=FALSE}
+
+numtrain = ceiling(.8*440 ) 
+set.seed(922)
+
+train_ind = sample(440, numtrain)
+traindata = CrimeRate[train_ind, ]
+
+testdata = CrimeRate[-train_ind, ]
+
+set.seed(NULL)  
+```
+
+
+
+
+
+# Data Visualization
+
+Having successfully split the data for analysis, we can now move on to the data visualization phase. Here we will be analyzing the associations between each variable through a Scatter plot and Correlation Matrix. 
+
+]
+<!-- Matrix Scatterplot -->
+<!-- Anytime you refer to the figure use "@fig-matrix-scatter" -->
+```{r , fig.width=6.5, fig.height=6.5}
+#| label: fig-matrix-scatter
+#| fig-cap: "Matrix Scatterplot of Crime Rate Data"
+
+#matrix scatter plot
+
+ggpairs(CrimeRate, columns = c(2, 9, 11, 12), aes(alpha = .5, color = Region))
+
+  
+
+```
+
+@fig-matrix-scatter provides a brief look into the interaction between crimes per 100,000 residents and four explanatory variables through a scatter plot matrix. Poverty, measured by percent of population below the poverty line has the strongest linear association with crimes per 100,00 residents with a correlation coefficient of -0.692, suggesting a moderate negative linear association. High school graduation rate has the lowest linear association with crime rate reporting a correlation coefficient of -.226. 
+
+The results from @tbl-cor-matrix support the associations reported in the scatter plot matrix.
+
+
+<!-- Correlation Matrix -->
+<!-- Anytime you refer to the table use "@tbl-cor-matrix" -->
+```{r, fig.width=6.5, fig.height=6.5}
+#| label: tbl-cor-matrix
+#| tbl-cap: "Correlation Matrix of Elephant Data"
+
+# Calculate the correlation matrix for quantitative variables and round to 3 decimal places
+cor_matrix <- round(cor(CrimeRate[,c(2,4,9,11)]), 3)
+
+# Create a beautiful table for the correlation matrix
+kable(cor_matrix, format = "html") %>%
+  kable_styling(full_width = FALSE, position = "left", bootstrap_options = c("striped", "hover"))
+```
+
+@tbl-cor-matrix displays the individual correlations of each explanatory variable with crime rate. The results support those found in the scatter plot matrix with poverty again having the strongest correlation to crimes per 100k residents and high school graduation rate having the lowest.
+
+
+<!-- Coded Scatterplot  -->
+<!-- Anytime you refer to the figure use "@fig-coded-scatter" -->
+```{r, fig.width=5, fig.height=4}
+#| label: fig-coded-scatter
+#| fig-cap: Scatter plot displaying poverty rate as the explanatory variable and serious crimes per 100,000 residents as the response. The colors represent the 4 US regions where data was collected. A linear regression has been applied for each region.
+
+ggplot(data = CrimeRate,
+       aes(x = Poverty,
+           y = CrimesPer100K, color = Region)) +  
+  geom_point(alpha = 0.65) + 
+  geom_smooth(method = "lm", aes(group = Region), se = FALSE) +  
+  labs(title = "Interaction Plot: Quantitative vs Categorical Predictor",
+       x = "Poverty",
+       y = "Crimes per 100k Residents",
+       color = "Region") +
+  theme_bw()
+
+
+anova(lm(CrimesPer100K ~ Region + Poverty, data = CrimeRate), lm(CrimesPer100K ~ Region + Poverty + Region:Poverty , data = CrimeRate))
+```
+
+In @fig-coded-scatter you can see the linear regression lines for each region present in the data set. Each line displays the relationship between Poverty and Crime Rate for each region. The North Central and North East regions have the steepest regression lines giving evidence that high school graduation rate has stronger linear association with crime rate in these regions. There are a few apparent outlines with the most extreme coming from the North East region.
+
+This scatter plot displays the interaction between poverty rate and region as predictors of crime. The colors represent each of the 4 regions from which data were collected. A linear regression line has been applied to each region to better visualize underlying relationships. Although not parallel, the lines all show the same general positive trend, as poverty increases crime increases regardless of region. However this positive trend is steeper for some regions, giving evidence of interaction. For example the slope of the North East's regression line is notably steeper than that of the Western region. This potentially implies that increases in poverty do not effect the crime rate in all regions equally.
+
+In order to decide if we should account for interaction in our model a partial f test was ran comparing a reduced model with only region and poverty as predictors to a full model including the interaction term. The partial F test rendered a large F-statistic of 8.326, and a small p-value of 2.152e-05, giving strong evidence that the interaction term is significant in a model with region and poverty. For this region the interaction term was added to our model.
+
+
+# Variable Pre-Processing
+
+*This section discusses the essential transformation techniques required to fit a linear model under proper conditions.*
+
+A linear model is suitable for data that meets the FINE requirements. To understand if our data does this, we must take a look at 3 plots.
+....
+
+## Verifying Original Data Model Conditions
+
+```{r, fig.width=6.5, fig.height=6.5}
+#Fitting a linear model to untransformed data
+crime.fit = lm(CrimesPer100K~Pop100K+HSGrad+Poverty+Region+Region:Poverty, data = traindata)
+
+par(mfrow=c(1,3))  #plot in 1x3 grid 
+
+#residuals vs. fitted plot
+plot(resid(crime.fit)~fitted(crime.fit),ylab='Residuals',xlab='Fitted')
+abline(h=0,lty=2)
+
+#normal QQ-plot of residuals
+qqnorm(resid(crime.fit),ylab='Residuals'); qqline(resid(crime.fit),lty=2)
+
+#histogram of residuals
+hist(resid(crime.fit),main="",xlab='Residuals',col='lightblue')
+
+par(mfrow=c(1,1)) #return to a 1x1 plot grid
+```
+Form: Taking a look at the residuals vs. fitted plot, the residuals seem to be randomly scattered around our reference line, with the exception of one point. We can conclude that Form is suitable.
+
+Equal Variance: Using the Residual Histogram, we can see that there the residuals are approximately normally distributed, but the Residual vs. Fitted plot shows us that fanning is present, so Equal Variance has been violated
+
+Normality: The QQPlot follows does not follow linear path relatively well, flaring out on each end, violating normality.
+
+Because equal variance and normality have been violated, we may want to make a transformation on the response variable. However, we need to look at the residual plots of each individual explanatory variable to decide whether to increase or decrease power.
+
+```{r}
+plot(resid(crime.fit)~Pop100K, ylab='Residuals', data=traindata); abline(h=0,lty=2)
+plot(resid(crime.fit)~HSGrad, ylab='Residuals', data=traindata); abline(h=0,lty=2)
+plot(resid(crime.fit)~Poverty, ylab='Residuals', data=traindata); abline(h=0,lty=2)
+
+
+```
+The 3 visuals above represent each individual variable's relationship with Crime Rate. While the 2 scatter plots containing Poverty and High School Graduation rate seem to maintain relatively linear form, the population visual contains a "C" shaped curve, indicating increasing the power of population in the linear model.
+
+-- Data Abnormalities --
+
+While all 3 variables have some outliers, Pop100K seems to have very large outliers and an unusual residual plot reguardless of transformation. Standard deviation is also smaller than the rest, when ignoring the large outliers.
+
+Using what we now know about the model conditions, we will increase y power using the square root, and increasing the population power by squaring it.
+The model:
+
+*This model is formatted as code input for R Studio, and is not meant as an equation that reflects the actual Model Equation*
+
+$$CrimesPer100K^{0.5} = Pop100K^2+HSGrad+Poverty+Region+Poverty:Region)$$
+
+-- Residual Analysis --
+
+With the data now pre-processed and transformed, we can proceed to examine the residual diagnostics.
+
+```{r}
+
+#Fitting a linear model to untransformed data
+crime.fit2 = lm(CrimesPer100K^0.5~I(Pop100K^2)+HSGrad+Poverty+Region+Region:Poverty,traindata)
+  
+par(mfrow=c(1,3))  #plot in 1x3 grid 
+
+#residuals vs. fitted plot
+plot(resid(crime.fit2)~fitted(crime.fit2),ylab='Residuals',xlab='Fitted')
+abline(h=0,lty=2)
+
+#normal QQ-plot of residuals
+qqnorm(resid(crime.fit2),ylab='Residuals'); qqline(resid(crime.fit2),lty=2)
+
+#histogram of residuals
+hist(resid(crime.fit2),main="",xlab='Residuals',col='lightblue')
+
+par(mfrow=c(1,1)) #return to a 1x1 plot grid
+
+```
+Form: The residual vs. fitted plot shows no patterns, assuring correct form.
+
+Equal Variance: The residual vs. fitted plot shows no fanning or bow tie patterns with the majorty of points residing between 4 and -4, and the Residual Histogram follows an approximately normal distribution, assuring Equal Variance.
+
+Normality: The QQ Plot follows a linear path very well, with the exception of one point, assuring normality.
+
+## Lack of Fit Test
+
+We are also able to perform a lack of fit test, considering our Poverty variable has duplicates and equal variance and normality are satisfied. We will perform this test to confirm our transformed model has linear form:
+
+```{r}
+anova(lm(crime.fit2),lm(CrimesPer100K^0.5~as.factor(Poverty),traindata))
+```
+Because the p-value is very high, we have extremely strong evidence that the least squares line for our transformed linear model is not statistically significantly worse than the separate means model. In other words, correct form can be assumed for our model.
+
+## Conclusion
+After analyzing the Residual vs Fitted Plot, QQ Plot, Residual Histogram, and Lack of Fit Test, we can confirm that all conditions are reasonably met and proceed with statistical inference.
+
+# Fit a Linear Model 
+
+Having conducted thorough residual diagnostics, we are now equipped to proceed with statistical inference and prediction under our transformed linear model.
+
+```{r} 
+#| label: tbl-mod1-summary
+#| tbl-cap: 'Model Summary for Model 1'
+
+fit = lm(CrimesPer100K^0.5~I(Pop100K^2)+HSGrad+Poverty+Region+Region:Poverty,
+         traindata)
+summary(fit)
+
+
+```
+
+
+- All of the following information is in context of @tbl-mod1-summary. 
+
+## Model Equation
+
+To understand the context of our analysis, the Model Equation is provided below:
+
+$$\begin{split}
+\hat{\sqrt{Crime}} = 3.067+0.000387(Pop100K^2)+0.034(HSGrad)+0.153(Poverty)-0.480(RegionNE)\\+1.051(RegionS)+0.558(RegionW)-0.0186428(Poverty)(RegionNE)\\
+-0.1734865(Poverty)(RegionS)-0.1597916(Poverty)(RegionW)
+\end{split}$$
+
+## Model Understood
+
+Because the model is transformed, prediction from this model does not directly predict Crime Rate. Each explanatory variable ($Pop100K^2$, HSGrad, Poverty, and Region) contributes to the prediction of $\sqrt{Crime\hspace{1mm}Rate}$. Because of this we will need to square any results in order to correctly interpret crime per 100,000 residents. So how well does our model do its job?
+
+## Model Evaluation
+
+This particular model does a moderate job in predicting $\sqrt{Crime\hspace{1mm}Rate}$, considering only 35.97% of variation is accounted for by this model, which is fairly low. However, the model utility test p-value does imply that at least one of the variables are statistically significant predictors of $\sqrt{Crime\hspace{1mm}Rate}$. As well, each individual variable is a statistically significant predictor of $\sqrt{Crime\hspace{1mm}Rate}$, after adjusting for all other variables, as seen by the low p-values. While reducing the amount of Unknown Error could be improved, the predictors in our model do seem to be efficient.
+
+Interpretation of $R^2$: 35.97% of variation in $\sqrt{Crime\hspace{1mm}Rate}$ is accounted for by $Pop100K^2$, HSGrad, Poverty, and Region. This value is fairly low, as stronger models would be expected to have an $R^2$ value above 50%.
+
+Interpretation of S: The typical deviation of an individual $\sqrt{Crime\hspace{1mm}Rate}$ from the mean is 1.432.
+
+- The units for $\sqrt{Crime\hspace{1mm}Rate}$ are $\sqrt{crimes\hspace{1mm}per\hspace{1mm}100,000\hspace{1mm}people}$
+
+## Coefficient Interpretations
+
+After further approval of our model, individual slope coefficients in our model may be interpreted, considering they hold valuable information about their relationship with $\sqrt{Crime\hspace{1mm}Rate}$. However, we must keep in mind that each $\beta_i$ hold a relationship with respect to our transformed response variable, not necessarily the original Crime Rate variable.
+
+Intercept: The expected $\sqrt{Crime\hspace{1mm}Rate}$ when all explanatory variables are 0 and the county is in North Central America, is 3.0668.
+
+$Pop100K^2$: Each increase of one in $Pop100K^2$ is associated with an increase of 0.000387 in predicted $\sqrt{Crime\hspace{1mm}Rate}$, after adjusting for the other variables.
+
+RegionW: The expected difference in $\sqrt{Crime\hspace{1mm}Rate}$, if a county is in the Western United States, is 0.558 greater than a county in North Central America, with any given Pop100K, HSGrad, and Poverty Rate.
+
+- The units for $\sqrt{Crime\hspace{1mm}Rate}$ are $\sqrt{crimes\hspace{1mm}per\hspace{1mm}100,000\hspace{1mm}people}$
+- These are just a few interpretations of the many $\beta_i$ in our linear model.
+
+## Verifying the Absence of Multicollinearity
+
+One last way we ca verify our model is sufficient for inference is by verifying the low influence of multicollinearity. 
+
+```{r}
+vif(fit)[,3]^2 |> 
+  kable(col.names = c('Variable','GVIF')) |> 
+  kable_classic(full_width = F, bootstrap_options = 'striped') |> 
+  row_spec(row=0,bold = T, align = 'c')
+
+
+```
+A couple of the GVIFs are above 5, indicating that collinearity will slightly affect our inferences, however none are above the severse threshold of 10. Thus, we should be slightly cautious when making inferences, but our model's credibility is not severely violated.
+
+We can now implement our model for statistical inference.
+
+# Statistical Inference 
+
+With the model fitted and evaluated, we can now shift our focus to inference, where we will compare ours to a less complex model to ensure significance. We will also interpret confidence intervals to apply our discoveries. 
+
+Recall @tbl-mod-summary
+
+-- Model Utility Test --
+
+Under the context of our linear model, the hypotheses being tested are as follows:
+
+$$\begin{split}
+H_o: \beta_{Pop100K^2} = \beta_{HSGRad} = \beta_{Poverty} =\beta_{RegionNE} =\beta_{RegionS}=\beta_{RegionW}\\=\beta_{(Poverty)(RegionNE)}=\beta_{(Poverty)(RegionS)}=\beta_{(Poverty)(RegionW)} =0\end{split}$$
+
+$$H_A: Atleast\hspace{1mm} 1\hspace{1mm} \beta_i \hspace{1mm} \neq 0$$
+
+Our model utility test reveals an overall F statistics of 21.35 on 9 and 342 degrees of freedom, and a p-value of 2.2e-16. Both values give evidence that our model is a statistically significant predictor of crime rate per 100k residents. 
+
+-- Partial F-Test --
+
+Another way we can gage how effective our model is in predicting Crime Rate, is by comparing it to a much more basic model. Here, we will be comparing our model with one only containing our most correlated predictor, Poverty.
+
+```{r}
+anova(lm(CrimesPer100K^0.5 ~ Poverty, traindata),fit)
+```
+$$\begin{split}
+H_o: \beta_{Pop100K^2} = \beta_{HSGRad} =\beta_{RegionNE} =\beta_{RegionS}=\beta_{RegionW}\\=\beta_{(Poverty)(RegionNE)}=\beta_{(Poverty)(RegionS)}=\beta_{(Poverty)(RegionW)} =0\end{split}$$
+
+$$H_A: Atleast\hspace{1mm} 1\hspace{1mm} \beta_i \hspace{1mm} \neq 0$$
+
+F-Stat: 13.488
+
+P-Value: $\approx0$
+
+Conclusion: Because the p-value is very small 0, we have very strong evidence that adding the predictors Pop100K^2, HSGrad, Region, and the interaction term to a model with just Poverty, statistically significantly improves the prediction of $\sqrt{Crime\hspace{1mm}Rate}$.
+
+To ensure that our interaction term is significant, we will also perform a partial F-test comparing a model with and without the interaction term.
+
+```{r}
+anova(lm(CrimesPer100K^0.5~I(Pop100K^2)+HSGrad+Poverty+Region,
+         traindata),fit)
+```
+$$\beta_{(Poverty)(RegionNE)}=\beta_{(Poverty)(RegionS)}=\beta_{(Poverty)(RegionW)} =0$$
+$$H_A:  Atleast\hspace{1mm}1\hspace{1mm} \beta_i  \neq 0$$
+F-Stat = 6.1732
+
+P-value = 0.0004271
+
+Conclusion: Because the p-value is very small 0, we have very strong evidence that adding the interaction term between region and poverty, statistically significantly improves the prediction of $\sqrt{Crime\hspace{1mm}Rate}$.
+
+
+-- Prediction and Confidence Intervals --
+
+Moving onto further analysis, approval from our past examinations of our linear model allows us to confidently make predictions about the $\sqrt{Crime\hspace{1mm}Rate}$ of counties with specific attributes. In this case, we will be performing 2 predictions:
+```{r}
+mean(CrimeRate$CrimesPer100K)
+sd(CrimeRate$CrimesPer100K)
+
+sample = data.frame(Pop100K=23, HSGrad=63.7, Poverty=19.5, Region="NE")
+
+#Prediction Interval
+predict(fit, newdata=sample , interval = "prediction",  level=0.95)
+
+#Confidence Interval 
+predict(fit, newdata=sample , interval = "confidence",  level=0.95)
+
+
+
+```
+The parameters chosen for confidence and prediction intervals come from the observed data for Kings New York. Kings NY is of interest because it's crime rate is more than 8 standard deviations above the mean crime rate, making it the city with the highest crime rate in this data set. 
+
+Mean crime rate: 57.2864
+King NY cime rate: 295.987
+
+Note: The statistics in the following interpretations have been squared to account for earlier transformations. 
+
+With 95% confidence, we predict that a city in the North East with a population of 230,000, high school graduation rate of 63.7%, and Poverty rate of 19.5% will experience crimes per 100k residents between 38.676 and 152.498. The average amount of crimes per 100k residents for a city with the same parameters is predicted with 95% confidence to be between 65.238 and 110.040.
+
+These intervals are interesting as they do not capture the actual amount of crime recorded for Kings New York. This however is not entirely suprising as Kings NY was an extremely abnormal outlier (see fig coded scatter).
+
+Because of this unique result we will conduct another confidence and prediction interval to ensure the predictive capabilities of our model. For the second test we have chosen to use parameters from Santa Barbra county which is not an outlier. 
+
+```{r}
+sample2 = data.frame(Pop100K=3.696, HSGrad=80.0, Poverty=7.4, Region="W")
+
+#Prediction Interval
+predict(fit, newdata=sample2 , interval = "prediction",  level=0.95)
+
+#Confidence Interval 
+predict(fit, newdata=sample2 , interval = "confidence",  level=0.95)
+```
+
+Prediction interval: (21.031, 105.74)
+Confidence Interval: (49.196, 61.685)
+With 95% confidence, we predict that a county with a population of 369,600, high school graduation rate of 80%, and poverty level of 7.4% will experience between 21.031 and 105.74 crimes per 100,000 residents. Furthermore we can narrow down the interval for the average amount of crime experienced per 100,000 residents to be between 49.169 and 61.685.
+
+Both of these intervals contain the actual value reported for Santa Barbra county, verifying the predictive ability of our model.
+
+
+# Model validation
+We will now turn to model validation to ensure that our model performs reasonably well outside of our training data.
+```{r}
+predicted=predict(fit, testdata)
+actual= testdata$CrimesPer100K
+MSPE=mean((predicted-sqrt(actual))^2)
+
+anova(fit)
+
+```
+
+We will now turn to model validation to ensure that our model performs reasonably well outside of our training data. 
+
+Using the test data that was subset earlier, MSPE or predicted mean square error was calculated to be about 1.3655. The MSE from our model is 2.052. These values are reasonably close and allow us to successfully verify that our model's predictive capabilities are acceptable. 
+
+# Conclusion
+
+The regression analysis of crime in US counties leads us to two major conclusions. Firstly a regression model with multiple predictors can significantly increase our ability to predict potential high and low crime counties. Through a model utility test we found that our model which considers, high school graduation rate, poverty level, region, population, and the interaction between region and poverty, significantly increases our ability to predict crime rates. Furthermore we performed a partial F-test comparing our model to one containing only poverty as a predictor for crime. This test allowed us to conclude that our more complex model does a significantly better job as a prediction tool than a model that attempts to estimate crime based on poverty alone.
+
+What does this mean for real world crime? The findings in this report give insight as to what risk factors could be contributing to counties currently experiencing increased crime rates. More importantly our model allows the investigation of specific combinations of risk factors that may seem insignificant if viewed one at a time. However our model is by no means an exact predictor of crime. 
+
+One issue that appeared consistently throughout this report was a lack of a strong coefficient of determination. Our model failed to reach levels above 38% meaning that there is still a substantial amount of unexplained variation within the final model. 
+
+Another issue pertained to data collection. We were unable to find vital information about how, where, and who originally collected the data. In a future study knowing this information could enable the researcher to communicate better conclusions and aid in variable selection; the researcher could select variables for analysis that the original data collector found particularly important. 
+
+In a future study it would likely be beneficial to test more terms for interaction. We were able to decrease unexplained variation by including an interaction term between poverty and region. There is a possibility that other variables could have significant interaction with each other as well, leading to the possibility of a superior model. 
+
+# Appendix
+
+## Dataset
+
+The dataset has been submitted separately on Canvas alongside the project submission.
+
+-- Data set Variables --
+
+1. CrimesPer100K: the number of serious crimes (per 100,000 people)
+
+2. Area: Land area (in 100s of square miles)
+
+3. Pop100K: Total population (in 100,000s of people)
+
+4. Pop18-34: Percent of the population that is age 18 to 34 (in percent)
+
+5. Pop65+: Percent of the population that is age 65 or over (in percent)
+
+6. Physicians: Total number of practicing physicians
+
+7. BedsPer100K: Number of hospital beds (per 100,000 people)
+
+8. HSGrad: Percent of the population that has graduated from high school (in percent)
+
+9. Bachelors: Percent of the population that has graduated from a 4-year college (in percent)
+
+10: Poverty: Percent of the population that below the poverty line (in percent)
+
+11. Unemploy: Percent of the adult population that is unemployed (in percent)
+
+12. IncPerCapita: Income per person (in thousands of dollars)
+
+13. Region: Location of the county within the U.S. (North East, North Central, South, West)
+
+-- Our variables --
+
+1. testdata: Random sample of 20% (88 Observations) in the dataset
+
+2. traindata: The remaining 80% (352) of observations in the dataset
+
+Source: Canvas
+
+## List of Extras
+
+- Title Page Image Address:
+
+https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.redbubble.com%2Fi%2Fsticker%2FBad-Girl-Dog-Arrested-And-Incarcerated-by-smartnet77%2F44053999.EJUG5&psig=AOvVaw3fcPlAeMiLj-PE5NXwdjSJ&ust=1739772561519000&source=images&cd=vfe&opi=89978449&ved=0CBQQjRxqFwoTCIDu8_3Dx4sDFQAAAAAdAAAAABAE
+
+- Interaction plot 
+- Test of significance for interaction term
+- Acknowledgement
+- Use of ggplot
+- Improved presentation: theme, table of contents, in line code
+- Color coded matrix scatterplot
+
